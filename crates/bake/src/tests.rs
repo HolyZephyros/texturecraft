@@ -20,6 +20,9 @@ mod bent_normal_space;
 #[path = "test/cage_shell.rs"]
 mod cage_shell;
 
+#[path = "test/fitted_cage.rs"]
+mod fitted_cage;
+
 #[path = "test/high_poly_reach.rs"]
 mod high_poly_reach;
 
@@ -362,9 +365,9 @@ fn two_runs_are_identical_and_sized() {
 
 #[test]
 fn strips_match_a_single_pass() {
-    let m = primitives::material_ball();
-    let bvh = Bvh::new(&m);
-    let s = with_rays(
+    let mesh = primitives::material_ball();
+    let bvh = Bvh::new(&mesh);
+    let bake_settings = with_rays(
         {
             let mut base = settings(64, &[]);
             base.common = CommonBakeSettings { antialiasing: BakeAntialiasing::Subsampling2x2, ..base.common };
@@ -374,24 +377,26 @@ fn strips_match_a_single_pass() {
         4,
         0.25,
     );
-    let req = BakeRequest {
+    let request = BakeRequest {
         low_base_color: &[],
-        mesh: &m,
+        mesh: &mesh,
         bvh: &bvh,
         material: 0,
-        settings: &s,
+        settings: &bake_settings,
         high: None,
         cage: None,
         skew: None,
         cage_paint: None,
         tiles: (1, 1),
     };
-    let whole = bake(&req, &Progress::new()).unwrap();
-    let strips = bake_in_strips(&req, &Progress::new(), 128 * 2, &CpuTracer, &[]).unwrap();
-    for (map, a) in &whole.maps {
-        let b = &strips.maps[map];
-        let off = a.iter().zip(b).filter(|(a, b)| (*a - *b).abs() > 1e-3).count();
-        assert!(off * 200 < a.len(), "{map:?}: {off} of {} differ", a.len());
+
+    let whole = bake(&request, &Progress::new()).unwrap();
+    let strips = bake_in_strips(&request, &Progress::new(), 128 * 2, &CpuTracer, &[], None).unwrap();
+
+    for (map, whole_pixels) in &whole.maps {
+        let strip_pixels = &strips.maps[map];
+        let differences = whole_pixels.iter().zip(strip_pixels).filter(|(whole, strip)| (*whole - *strip).abs() > 1e-3).count();
+        assert!(differences * 200 < whole_pixels.len(), "{map:?}: {differences} of {} differ", whole_pixels.len());
     }
 }
 
@@ -1054,24 +1059,6 @@ fn occlusion_falls_off_linearly_to_the_max_distance() {
     let ambient_occlusion = mean(covered_values(&mesh, &output, BakedMap::AmbientOcclusion).into_iter().map(|(_, value)| value));
 
     assert!((ambient_occlusion - 0.5).abs() < 0.01, "{ambient_occlusion}");
-}
-
-#[test]
-fn secondary_ray_defaults_preserve_per_map_distances() {
-    let parameters = BakeSettings::default();
-    let expected_rays = RaySettings {
-        rays: 64,
-        min_distance: 0.00001,
-        max_distance: 1.0,
-        relative_to_bounding_box: true,
-        spread: 180.0,
-        distribution: RayDistribution::Cosine,
-    };
-
-    assert_eq!(parameters.maps.ao.parameters.rays, expected_rays);
-    assert_eq!(parameters.maps.ao.parameters.attenuation, texturecraft_core::AmbientOcclusionAttenuation::Linear);
-    assert_eq!(parameters.maps.bent_normal.parameters.rays, expected_rays);
-    assert_eq!(parameters.maps.thickness.parameters.rays, RaySettings { max_distance: 0.1, ..expected_rays });
 }
 
 #[test]

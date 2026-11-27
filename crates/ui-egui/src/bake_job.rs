@@ -1,3 +1,5 @@
+use texturecraft_engine::core::BakedMap;
+
 use crate::RunningBake;
 
 /// A background bake of one or more texture sets.
@@ -7,4 +9,8 @@ pub struct BakeJob {
     pub total: usize,
     /// The mesh the job was started on: a result for another mesh (changed or reimported meanwhile) is not applied.
     pub mesh_id: u64,
+    /// The one map to bake (a row's quick bake) instead of the checked ones
+    pub only: Option<BakedMap>,
+    /// An auto-rebake: the set, the one map it bakes and what that map was baked from when it started; `None` bakes every checked map
+    pub rebake: Option<crate::auto_rebake::Due>,
 }
